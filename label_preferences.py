@@ -119,9 +119,7 @@ def judge_painting(row, model, processor):
 
 def export_pairs(rows, judgments):
     counts = [0, 0, 0]
-    rng = random.Random(SEED)
-    with (OUTPUT_DIR / "judge_pairs.jsonl").open("w", encoding="utf-8") as judged, \
-        (OUTPUT_DIR / "random_pairs.jsonl").open("w", encoding="utf-8") as control:
+    with (OUTPUT_DIR / "judge_pairs.jsonl").open("w", encoding="utf-8") as judged:
         for row in rows:
             judgment = judgments[row["image_id"]]
             rejects = judgment["rejects"]
@@ -135,11 +133,8 @@ def export_pairs(rows, judgments):
                     "rejected": reject["text"],
                 }
                 judged.write(json.dumps(record, ensure_ascii=False) + "\n")
-                if rng.choice([False, True]):
-                    record["chosen"], record["rejected"] = record["rejected"], record["chosen"]
-                control.write(json.dumps(record, ensure_ascii=False) + "\n")
     print(f"Paintings with 0, 1, or 2 pairs: {counts}")
-    print(f"Saved {counts[1] + 2 * counts[2]} pairs per file in {OUTPUT_DIR}")
+    print(f"Saved {counts[1] + 2 * counts[2]} pairs in {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":
