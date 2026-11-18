@@ -109,6 +109,7 @@ def judge_painting(row, model, processor):
 
     return {
         "image_id": row["image_id"],
+        "split": row["split"],
         "model": MODEL_ID,
         "prompt_version": PROMPT_VERSION,
         "chosen": chosen,
@@ -128,6 +129,7 @@ def export_pairs(rows, judgments):
                 record = {
                     "pair_id": f"{row['image_id']}:{i}",
                     "image_id": row["image_id"],
+                    "split": row["split"],
                     "image_path": row["image_path"].as_posix(),
                     "chosen": judgment["chosen"],
                     "rejected": reject["text"],
@@ -139,7 +141,7 @@ def export_pairs(rows, judgments):
 
 if __name__ == "__main__":
     prepare_artcap()
-    rows = load_artcap(split="train")
+    rows = load_artcap(split="train") + load_artcap(split="val")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = OUTPUT_DIR / "judgments.jsonl"
 
