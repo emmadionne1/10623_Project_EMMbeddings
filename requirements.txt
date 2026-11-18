@@ -1,0 +1,13 @@
+accelerate
+bert-score
+gdown
+nltk
+numpy
+pandas
+pillow
+qwen-vl-utils
+rouge-score
+scikit-learn
+torch
+tqdm
+transformers
