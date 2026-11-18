@@ -10,6 +10,7 @@ from helpers.download_data import SEED, load_artcap, prepare_artcap
 MODEL_ID = "Qwen/Qwen3-VL-8B-Instruct"
 PROMPT_VERSION = 3
 OUTPUT_DIR = Path("data/preferences")
+torch.backends.cudnn.enabled = False
 LABELS = "ABCDE"
 
 JUDGE_PROMPT = """Rank the five candidate captions for this painting from best to worst.
@@ -56,12 +57,14 @@ def parse_judgment(response, captions):
     seen_reasons = set()
     for reject in rejects:
         label, criterion, reason = reject["label"], reject["criterion"], reject["reason"]
-        if label not in captions or label == ranking[0] or captions[label] in seen_captions:
-            raise ValueError("Rejects must be distinct lower-ranked captions")
+        if label not in captions or label == ranking[0]:
+            raise ValueError("Rejects must be lower-ranked captions")
         if criterion not in ("accuracy", "coverage", "specificity"):
             raise ValueError("Invalid preference criterion")
-        if not isinstance(reason, str) or not reason.strip() or reason.strip() in seen_reasons:
-            raise ValueError("Each preference needs a distinct reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("Each preference needs a reason")
+        if captions[label] in seen_captions or reason.strip() in seen_reasons:
+            continue
         seen_captions.add(captions[label])
         seen_reasons.add(reason.strip())
         rejected_captions.append({"text": captions[label], "criterion": criterion, "reason": reason.strip()})

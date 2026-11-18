@@ -1,6 +1,7 @@
 accelerate
 bert-score
 gdown
+ipykernel
 nltk
 numpy
 pandas
