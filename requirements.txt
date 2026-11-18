@@ -9,5 +9,6 @@ qwen-vl-utils
 rouge-score
 scikit-learn
 torch
+torchvision
 tqdm
 transformers
