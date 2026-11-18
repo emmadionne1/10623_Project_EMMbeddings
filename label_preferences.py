@@ -4,10 +4,10 @@ from pathlib import Path
 import torch
 from PIL import Image
 from tqdm.auto import tqdm
-from transformers import AutoModelForMultimodalLM, AutoProcessor
+from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 from helpers.download_data import SEED, load_artcap, prepare_artcap
 
-MODEL_ID = "Qwen/Qwen3.6-27B"
+MODEL_ID = "Qwen/Qwen3-VL-8B-Instruct"
 PROMPT_VERSION = 3
 OUTPUT_DIR = Path("data/preferences")
 LABELS = "ABCDE"
@@ -77,6 +77,7 @@ def judge_painting(row, model, processor):
 
     with Image.open(row["image_path"]) as source:
         image = source.convert("RGB")
+    image.thumbnail((896, 896))
     messages = [{"role": "user", "content": [
         {"type": "image", "image": image},
         {"type": "text", "text": JUDGE_PROMPT + "\n" + caption_text},
@@ -85,7 +86,7 @@ def judge_painting(row, model, processor):
     for attempt in range(2):
         inputs = processor.apply_chat_template(
             messages, tokenize=True, add_generation_prompt=True, return_dict=True,
-            return_tensors="pt", enable_thinking=False,
+            return_tensors="pt",
         ).to(model.device)
         with torch.inference_mode():
             output = model.generate(**inputs, max_new_tokens=512, do_sample=False)
@@ -158,7 +159,9 @@ if __name__ == "__main__":
     pending = [row for row in rows if row["image_id"] not in judgments]
     if pending:
         processor = AutoProcessor.from_pretrained(MODEL_ID)
-        model = AutoModelForMultimodalLM.from_pretrained(MODEL_ID, device_map="auto", dtype="auto")
+        model = Qwen3VLForConditionalGeneration.from_pretrained(
+            MODEL_ID, device_map="cuda:0", dtype=torch.float16,
+        )
         model.eval()
         with path.open("a", encoding="utf-8") as f:
             for row in tqdm(pending, desc="Judging paintings"):
