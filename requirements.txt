@@ -6,6 +6,7 @@ nltk
 numpy
 pandas
 pillow
+pycocoevalcap
 qwen-vl-utils
 rouge-score
 scikit-learn
