@@ -7,3 +7,4 @@ venv/
 /data/*
 !/data/preferences/
 !/data/baseline/
+!/data/kale/
