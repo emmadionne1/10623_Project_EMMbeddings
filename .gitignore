@@ -4,7 +4,9 @@ __pycache__/
 venv/
 .ipynb_checkpoints/
 .DS_Store
+/config.py
 /data/*
 !/data/preferences/
 !/data/baseline/
 !/data/kale/
+/wandb/
