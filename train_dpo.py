@@ -15,7 +15,7 @@ import torch
 import wandb
 
 SEED = 10623
-torch.backends.cudnn.enabled = False
+torch.backends.cudnn.enabled = True
 
 
 def create_dataset(pairs):
@@ -36,7 +36,7 @@ def create_model(output_dir, eval_only, model_name, lora_r, lora_alpha, target_m
     if eval_only:
         processor = AutoProcessor.from_pretrained(adapter_path)
     else:
-        processor = AutoProcessor.from_pretrained(model_name, min_pixels=224 * 224, max_pixels=768 * 768)
+        processor = AutoProcessor.from_pretrained(model_name, size={"shortest_edge": 224 * 224, "longest_edge": 768 * 768})
     processor.tokenizer.padding_side = "left"
     if processor.tokenizer.pad_token is None:
         processor.tokenizer.pad_token = processor.tokenizer.eos_token
