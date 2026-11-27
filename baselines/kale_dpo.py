@@ -203,6 +203,13 @@ def generate_captions(model, tok, loader, device):
     return out
 
 
+def distinct_pct(results):
+    """% of captions that differ from every other caption in the set (case/whitespace ignored).
+    A model that ignores the image writes the same sentence for everything and scores ~0%."""
+    caps = [' '.join(str(r['pred_caption']).lower().split()) for r in results]
+    return round(100 * len(set(caps)) / len(caps), 1)
+
+
 def score(results):
     """BLEU-1..4, ROUGE-L, CIDEr x100 with pycocoevalcap (same pipeline as helpers/metrics.py).
     METEOR is left to the notebook / helpers/metrics.py; it is not needed to pick an epoch."""
@@ -220,6 +227,7 @@ def score(results):
     s['CIDEr'], _ = Cider().compute_score(ref, gen)
     s = {k: round(100 * float(v), 2) for k, v in s.items()}   # float(): CIDEr is a numpy float
     s['mean_len'] = round(sum(len(r['pred_caption'].split()) for r in results) / len(results), 1)
+    s['distinct'] = distinct_pct(results)
     s['n'] = len(results)
     return s
 
@@ -365,7 +373,15 @@ def cmd_train(args, device):
     if abs(start['val_loss'] - math.log(2)) > 0.02:
         print(f'WARNING: starting val DPO loss is {start["val_loss"]:.3f}, expected 0.693. The reference '
               'log-probs do not match this checkpoint, so DPO results would be wrong.')
-    best, best_epoch = -1.0, None   # best DPO epoch (>= 0) by val CIDEr; compare with the start in summary.json
+    # Diversity rule: an epoch can only be picked if >= min_distinct % of its val captions are distinct.
+    # BLEU/CIDEr reward one generic caption for every painting, so CIDEr alone can pick a collapsed model.
+    # Smoke runs (tiny, barely trained) skip the rule so the plumbing can still be tested.
+    def eligible(row):
+        return bool(args.smoke) or row['val_distinct'] >= args.min_distinct
+    if not eligible(start):
+        print(f'WARNING: the starting checkpoint has only {start["val_distinct"]}% distinct val captions '
+              f'(rule: >= {args.min_distinct}%). It looks collapsed; fix the SFT checkpoint before DPO.')
+    best, best_epoch = -1.0, None   # best eligible DPO epoch (>= 0) by val CIDEr; compare with the start in summary.json
 
     step = 0
     for epoch in range(args.epochs):
@@ -392,21 +408,29 @@ def cmd_train(args, device):
                     print(f'epoch {epoch} step {step}/{total} ' + ' '.join(f'{k} {v / n:.3f}' for k, v in run.items())
                           + f' lr {sched.get_last_lr()[0]:.2e} ({time.time() - t:.0f}s)', flush=True)
         row = evaluate(epoch)
-        if row['val_CIDEr'] > best:
+        if not eligible(row):
+            print(f'  epoch {epoch} not eligible: {row["val_distinct"]}% distinct val captions < {args.min_distinct}%')
+        elif row['val_CIDEr'] > best:
             best, best_epoch = row['val_CIDEr'], epoch
             torch.save({'model': model.state_dict(), 'epoch': epoch, 'args': vars(args)},
                        os.path.join(args.out_dir, 'best.pth'))
             print(f'  new best val CIDEr {best} -> saved best.pth')
 
-    summary = {'best_epoch': best_epoch, 'best_val_CIDEr': float(best), 'start_val_CIDEr': float(start['val_CIDEr']),
-               'beats_start': bool(best > start['val_CIDEr'])}
+    summary = {'best_epoch': best_epoch,
+               'best_val_CIDEr': float(best) if best_epoch is not None else None,
+               'start_val_CIDEr': float(start['val_CIDEr']),
+               'start_val_distinct': start['val_distinct'],
+               'min_distinct': args.min_distinct,
+               'beats_start': best_epoch is not None and bool(best > start['val_CIDEr'])}
     # Write then rename: the notebook treats an existing summary.json as "run finished"
     tmp = os.path.join(args.out_dir, 'summary.json.tmp')
     with open(tmp, 'w') as f:
         json.dump(summary, f, indent=1)
     os.replace(tmp, os.path.join(args.out_dir, 'summary.json'))
     print('done:', summary)
-    if not summary['beats_start']:
+    if best_epoch is None:
+        print(f'No DPO epoch passed the diversity rule (>= {args.min_distinct}% distinct val captions); no best.pth saved.')
+    elif not summary['beats_start']:
         print('No DPO epoch beat the starting checkpoint on val CIDEr.')
 
 
@@ -442,6 +466,8 @@ def main():
     ap.add_argument('--max_grad_norm', type=float, default=1.0)
     ap.add_argument('--train_vision', action='store_true', help='also train the image encoder (off by default)')
     ap.add_argument('--log_every', type=int, default=20)
+    ap.add_argument('--min_distinct', type=float, default=50.0,
+                    help='diversity rule: an epoch is only picked if at least this %% of val captions are distinct')
     ap.add_argument('--seed', type=int, default=10623)
     args = ap.parse_args()
 
