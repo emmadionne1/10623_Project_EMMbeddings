@@ -210,6 +210,20 @@ def distinct_pct(results):
     return round(100 * len(set(caps)) / len(caps), 1)
 
 
+def check_java_scoring():
+    """pycocoevalcap's tokenizer (and METEOR) read Java's stdout line by line and match lines to captions
+    by position. On Colab the JVM prints a warning line to stdout, which shifted every caption onto the
+    next painting's references (scores looked like random pairing). Silence JVM logging, then verify."""
+    os.environ['JAVA_TOOL_OPTIONS'] = '-XX:+IgnoreUnrecognizedVMOptions -XX:-UseContainerSupport -Xlog:all=off'
+    from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
+    got = PTBTokenizer().tokenize({0: [{'caption': 'A cat, sitting.'}], 1: [{'caption': 'two dogs'}],
+                                   2: [{'caption': 'x'}, {'caption': 'y z'}]})
+    want = {0: ['a cat sitting'], 1: ['two dogs'], 2: ['x', 'y z']}
+    if got != want:
+        raise RuntimeError(f'PTBTokenizer output is misaligned or empty: {got} (expected {want}). '
+                           'Scores would compare captions with the wrong references.')
+
+
 def score(results):
     """BLEU-1..4, ROUGE-L, CIDEr x100 with pycocoevalcap (same pipeline as helpers/metrics.py).
     METEOR is left to the notebook / helpers/metrics.py; it is not needed to pick an epoch."""
@@ -217,6 +231,7 @@ def score(results):
     from pycocoevalcap.bleu.bleu import Bleu
     from pycocoevalcap.rouge.rouge import Rouge
     from pycocoevalcap.cider.cider import Cider
+    check_java_scoring()
     tok = PTBTokenizer()
     gen = tok.tokenize({i: [{'caption': ' '.join(r['pred_caption'].split()) or 'none'}] for i, r in enumerate(results)})
     ref = tok.tokenize({i: [{'caption': c} for c in r['gold_caption']] for i, r in enumerate(results)})
