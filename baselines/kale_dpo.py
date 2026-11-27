@@ -218,7 +218,7 @@ def score(results):
     s.update({f'B{n}': v for n, v in enumerate(b, 1)})
     s['ROUGE_L'], _ = Rouge().compute_score(ref, gen)
     s['CIDEr'], _ = Cider().compute_score(ref, gen)
-    s = {k: round(100 * v, 2) for k, v in s.items()}
+    s = {k: round(100 * float(v), 2) for k, v in s.items()}   # float(): CIDEr is a numpy float
     s['mean_len'] = round(sum(len(r['pred_caption'].split()) for r in results) / len(results), 1)
     s['n'] = len(results)
     return s
@@ -398,9 +398,13 @@ def cmd_train(args, device):
                        os.path.join(args.out_dir, 'best.pth'))
             print(f'  new best val CIDEr {best} -> saved best.pth')
 
-    summary = {'best_epoch': best_epoch, 'best_val_CIDEr': best, 'start_val_CIDEr': start['val_CIDEr'],
-               'beats_start': best > start['val_CIDEr']}
-    json.dump(summary, open(os.path.join(args.out_dir, 'summary.json'), 'w'), indent=1)
+    summary = {'best_epoch': best_epoch, 'best_val_CIDEr': float(best), 'start_val_CIDEr': float(start['val_CIDEr']),
+               'beats_start': bool(best > start['val_CIDEr'])}
+    # Write then rename: the notebook treats an existing summary.json as "run finished"
+    tmp = os.path.join(args.out_dir, 'summary.json.tmp')
+    with open(tmp, 'w') as f:
+        json.dump(summary, f, indent=1)
+    os.replace(tmp, os.path.join(args.out_dir, 'summary.json'))
     print('done:', summary)
     if not summary['beats_start']:
         print('No DPO epoch beat the starting checkpoint on val CIDEr.')
